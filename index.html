@@ -123,7 +123,7 @@ body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;backgroun
 </div>
 
 <script>
-const GAS_URL='https://script.google.com/macros/s/AKfycbxlJ9qbKvJmNl6p3hv6Fv0as6JkLoAb6Hbl31R84-YU3OG6zuC7HNHDl5E2MscAgiIN/exec';
+const GAS_URL='https://script.google.com/macros/s/AKfycbyL59WPHQaqxHV3WXN_bAr_xizLevgKtSnHtGTOzO7KWc4dic6RqFFzvJyYM3ZAhxw/exec';
 let paints=[
   {id:1,name:'日本ペイント ファインシリコンフレッシュ',maker:'日本ペイント',color:'ホワイト',type:'外壁用',size:15,qty:3,used:0,loc:'倉庫A',site:'本社',status:'未開封',date:'2026-05-01',memo:''},
   {id:2,name:'関西ペイント アレスダイナミックTOP',maker:'関西ペイント',color:'クリーム',type:'外壁用',size:15,qty:1,used:40,loc:'倉庫A',site:'本社',status:'使用中',date:'2026-04-15',memo:'田中邸 残り60%'},
@@ -147,49 +147,46 @@ function showToast(msg,color){
 }
 function loadFromSheet(){
   document.getElementById('sync-status').textContent='読み込み中...';
-  const CSV_URL='https://docs.google.com/spreadsheets/d/e/2PACX-1vQAQGmmn5uXb27UeqNSQCSA6MuakqLcmoUW_OqqLOgsSMwiG22I3ltbu4sT13Jf1V61n33y7wxR3O4G/pub?gid=2110285388&single=true&output=csv';
-  fetch('https://corsproxy.io/?'+encodeURIComponent(CSV_URL))
-    .then(r=>r.text())
-    .then(csv=>{
-      const lines=csv.trim().split('\n');
-      const headers=lines[0].split(',').map(h=>h.trim().replace(/^"|"$/g,''));
-      const data=lines.slice(1).map(line=>{
-        const vals=line.match(/(".*?"|[^,]+|(?<=,)(?=,)|^(?=,)|(?<=,)$)/g)||[];
-        const obj={};
-        headers.forEach((h,i)=>obj[h]=(vals[i]||'').replace(/^"|"$/g,'').trim());
-        return obj;
-      });
-      if(data.length>0&&data[0]['塗料名']){
-        paints=data.map(row=>{
-          const used=parseInt(row['使用率(%)'])||0;
-          return {
-            id:Number(row['ID'])||Date.now(),
-            name:row['塗料名']||'',
-            maker:row['メーカー']||'',
-            color:row['色']||'',
-            type:row['用途']||'外壁用',
-            size:parseFloat(row['容量(L)'])||15,
-            qty:parseInt(row['数量'])||1,
-            used:used,
-            loc:row['保管場所']||'',
-            site:row['現場名']||'本社',
-            status:row['ステータス']||'未開封',
-            date:row['登録日']||'',
-            memo:row['メモ']||'',
-          };
-        });
+  const s=document.createElement('script');
+  const cb='cb_'+Date.now();
+  window[cb]=function(data){
+    try{
+      if(Array.isArray(data)&&data.length>0&&data[0]['塗料名']){
+        paints=data.map(row=>({
+          id:Number(row['ID'])||Date.now(),
+          name:String(row['塗料名']||''),
+          maker:String(row['メーカー']||''),
+          color:String(row['色']||''),
+          type:String(row['用途']||'外壁用'),
+          size:parseFloat(row['容量(L)'])||15,
+          qty:parseInt(row['数量'])||1,
+          used:parseInt(row['使用率(%)'])||0,
+          loc:String(row['保管場所']||''),
+          site:String(row['現場名']||'本社'),
+          status:String(row['ステータス']||'未開封'),
+          date:String(row['登録日']||''),
+          memo:String(row['メモ']||''),
+        }));
         document.getElementById('sync-status').textContent='最終読込: '+nowStr();
         showToast('✅ スプレッドシートから読み込みました','#065f46');
       }else{
-        document.getElementById('sync-status').textContent='シートにデータなし — サンプルデータ表示中';
+        document.getElementById('sync-status').textContent='シートにデータなし';
       }
-      render();
-    })
-    .catch(e=>{
-      document.getElementById('sync-status').textContent='オフライン — ローカルデータ表示中';
-      showToast('⚠️ 接続できませんでした','#92400e');
-      render();
-    });
+    }catch(e){
+      document.getElementById('sync-status').textContent='読込エラー';
+    }
+    render();
+    delete window[cb];
+    if(s.parentNode)s.parentNode.removeChild(s);
+  };
+  s.onerror=function(){
+    document.getElementById('sync-status').textContent='オフライン — ローカルデータ表示中';
+    showToast('⚠️ 接続できませんでした','#92400e');
+    render();
+    delete window[cb];
+  };
+  s.src=GAS_URL+'?callback='+cb;
+  document.head.appendChild(s);
 }
 async function syncToSheet(){
   const btn=event&&event.target?event.target:document.querySelector('.sync-btn.green');

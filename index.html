@@ -145,27 +145,51 @@ function showToast(msg,color){
   const t=document.createElement('div');t.className='toast';t.style.background=color||'#1a2744';t.textContent=msg;
   document.body.appendChild(t);setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),300);},2500);
 }
-async function loadFromSheet(){
+function loadFromSheet(){
   document.getElementById('sync-status').textContent='読み込み中...';
-  try{
-    const res=await fetch(GAS_URL+'?action=getAll');
-    const data=await res.json();
-    if(data&&data.length>0){
-      paints=data.map(row=>({
-        id:Number(row['ID'])||Date.now(),name:row['塗料名']||'',maker:row['メーカー']||'',
-        color:row['色']||'',type:row['用途']||'外壁用',size:parseFloat(row['容量(L)'])||15,
-        qty:parseInt(row['数量'])||1,used:parseInt(row['使用率(%)'])||0,
-        loc:row['保管場所']||'',site:row['現場名']||'本社',status:row['ステータス']||'未開封',
-        date:row['登録日']||'',memo:row['メモ']||'',
-      }));
-      document.getElementById('sync-status').textContent='最終読込: '+nowStr();
-      showToast('✅ スプレッドシートから読み込みました','#065f46');
-    }else{document.getElementById('sync-status').textContent='シートにデータなし — サンプルデータ表示中';}
-  }catch(e){
-    document.getElementById('sync-status').textContent='オフライン — ローカルデータ表示中';
-    showToast('⚠️ 接続できませんでした','#92400e');
-  }
-  render();
+  const CSV_URL='https://docs.google.com/spreadsheets/d/e/2PACX-1vQAQGmmn5uXb27UeqNSQCSA6MuakqLcmoUW_OqqLOgsSMwiG22I3ltbu4sT13Jf1V61n33y7wxR3O4G/pub?gid=2110285388&single=true&output=csv';
+  fetch('https://corsproxy.io/?'+encodeURIComponent(CSV_URL))
+    .then(r=>r.text())
+    .then(csv=>{
+      const lines=csv.trim().split('\n');
+      const headers=lines[0].split(',').map(h=>h.trim().replace(/^"|"$/g,''));
+      const data=lines.slice(1).map(line=>{
+        const vals=line.match(/(".*?"|[^,]+|(?<=,)(?=,)|^(?=,)|(?<=,)$)/g)||[];
+        const obj={};
+        headers.forEach((h,i)=>obj[h]=(vals[i]||'').replace(/^"|"$/g,'').trim());
+        return obj;
+      });
+      if(data.length>0&&data[0]['塗料名']){
+        paints=data.map(row=>{
+          const used=parseInt(row['使用率(%)'])||0;
+          return {
+            id:Number(row['ID'])||Date.now(),
+            name:row['塗料名']||'',
+            maker:row['メーカー']||'',
+            color:row['色']||'',
+            type:row['用途']||'外壁用',
+            size:parseFloat(row['容量(L)'])||15,
+            qty:parseInt(row['数量'])||1,
+            used:used,
+            loc:row['保管場所']||'',
+            site:row['現場名']||'本社',
+            status:row['ステータス']||'未開封',
+            date:row['登録日']||'',
+            memo:row['メモ']||'',
+          };
+        });
+        document.getElementById('sync-status').textContent='最終読込: '+nowStr();
+        showToast('✅ スプレッドシートから読み込みました','#065f46');
+      }else{
+        document.getElementById('sync-status').textContent='シートにデータなし — サンプルデータ表示中';
+      }
+      render();
+    })
+    .catch(e=>{
+      document.getElementById('sync-status').textContent='オフライン — ローカルデータ表示中';
+      showToast('⚠️ 接続できませんでした','#92400e');
+      render();
+    });
 }
 async function syncToSheet(){
   const btn=event&&event.target?event.target:document.querySelector('.sync-btn.green');
